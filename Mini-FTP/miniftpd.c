@@ -23,7 +23,6 @@
 #include "common.h"
 
 
-/* Mettre 1 avec un debugger. */
 #if 0
 #define fork() (0)
 #endif
@@ -56,43 +55,31 @@ char *get_callername (int fd)
 } /* get_callername */
 
 
-/*
- * Reception d'un fichier (requete PUT).
- * 'clientfd' est un socket connecte a un client.
- * 'filename' est le nom du fichier a creer.
- * 'length' est le nombre d'octets attendus.
+/**
+ * Méthode utilisée pour la requête PUT (copie d'un fichier)
  */
-void put_file (int clientfd, char *filename, int length)
+void put_file (int socket, char *filename, int length)
 {
-    struct answer reponse;
-    struct stat stat_fich;
+    // Réponse
+    struct answer response;
+    response.errnum = 0;
+    response.nbbytes = 0;
+    response.ack = ANSWER_OK;
 
-    /*  Construction de la reponse */
-    reponse.errnum = 0;
-    reponse.nbbytes = 0;
-    reponse.ack = ANSWER_OK;
-
-    /* Creation du fichier */
+    // Création du fichier
     printf("Creation du fichier \n");
-    int fichier = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-    if(fichier != -1)
-    {
+    int file = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if(file != -1) {
         printf("Copies \n");
-        /* Echange des données  */
-        copy_n_bytes (clientfd, fichier, length);
+        copy_n_bytes (socket, file, length);
         printf("Fermeture \n");
-        /* Fermeture du fichier */
-        close (fichier);
-    }
-    else
-    {
+        close (file);
+    } else {
         printf ("Erreur lors de la creation du fichier \n");
     }
 
-    /*  Envoi de la réponse */
-    if(write (clientfd, &reponse, sizeof(reponse)) == -1)
-    {
+    // Réponse
+    if(write (socket, &response, sizeof(response)) == -1) {
         fprintf (stderr, "Erreur lors de l'écriture du fichier\n");
         exit (errno);
     }
@@ -100,190 +87,122 @@ void put_file (int clientfd, char *filename, int length)
 } /* put_file */
 
 
-/*
- * Envoi d'un fichier (requete GET).
- * 'clientfd' est un socket connecte a un client.
- * 'filename' est le nom du fichier a envoyer.
- */
-void get_file (int clientfd, char *filename)
+// Méthode utilisée pour la requête GET (Récupération d'un fichier)
+void get_file (int socket, char *filename)
 {
-    struct answer reponse;
+    struct answer response;
+    response.errnum = 0;
+    response.nbbytes = 0;
+    response.ack = ANSWER_OK;
+
     struct stat buf;
 
-    /*  Construction de la reponse */
-    reponse.errnum = 0;
-    reponse.nbbytes = 0;
-    reponse.ack = ANSWER_OK;
-
-    /* Récupération du fichier */
-    printf("Récupération du fichier \n");
-    int fichier = open(filename, O_RDONLY);
-    /*Verifie si le fichier existe*/
-    if (fichier != -1){
-        reponse.ack = ANSWER_OK;
-    }else{
-        printf ("Le fichier n'existe pas\n");
-        reponse.ack = ANSWER_ERROR;
-        reponse.errnum = errno;
+    int file = open(filename, O_RDONLY);
+    if (file != -1) {
+        response.ack = ANSWER_OK;
+    } else{
+        response.ack = ANSWER_ERROR;
+        response.errnum = errno;
     }
     stat(filename, &buf);
-    reponse.nbbytes = (int) buf.st_size;
+    response.nbbytes = (int) buf.st_size;
 
-    /*  Envoi de l'accusé de réponse */
-    if(write (clientfd, &reponse, sizeof(struct answer)) == -1)
+    if(write (socket, &response, sizeof(struct answer)) == -1)
     {
-        fprintf (stderr, "Erreur lors de l'écriture de la reponse\n");
         exit (errno);
     }
-    /*  Envoi de le fichier */
-    copy_all_bytes (fichier, clientfd);
-    close (fichier);
+    copy_all_bytes (file, socket);
+    close (file);
 
 } /* get_file */
 
 
-/*
- * Destruction d'un fichier (requete DEL).
- * 'clientfd' est un socket connecte a un client.
- * 'filename' est le nom du fichier a detruire.
- */
-void del_file (int clientfd, char *filename)
+// Suppression d'un fichier
+void del_file (int socket, char *filename)
 {
-    /*Création réponse*/
-    struct answer rep_del;
-    rep_del.ack = ANSWER_OK;
+    struct answer response;
+    response.ack = ANSWER_OK;
+    response.errnum = 0;
 
-    /*  Construction de la reponse */
-    rep_del.errnum = 0;
-
-    /* Verification de l'existence fichier a supprimer */
     FILE* file_exist = fopen(filename,"r");
-    if (file_exist != NULL)
-    {
-        rep_del.ack = ANSWER_OK;
-    }
-    else
-    {
-        printf ("Le fichier n'existe pas\n");
-        printf("%s",filename);
-        rep_del.ack = ANSWER_ERROR;
-        rep_del.errnum = errno;
+    if (file_exist != NULL) {
+        response.ack = ANSWER_OK;
+    } else {
+        response.ack = ANSWER_ERROR;
+        response.errnum = errno;
     }
     fclose (file_exist);
-
-    /*  Envoi de la réponse */
-    printf("Envoi de la réponse\n");
-    if(write (clientfd, &rep_del, sizeof(rep_del)) == -1)
+    if(write (socket, &response, sizeof(response)) == -1)
     {
-        fprintf (stderr, "Erreur lors de l'écriture de la reponse\n");
         exit (errno);
     }
 
-    /*Suppression du fichier*/
-    unlink(filename);
-
-    puts("suppression reussi");
-
-    /**** A COMPLETER ****/
-
+    remove(filename);
 } /* del_file */
 
-/*
- * ls sur un fichier/repertoire (requete DIR).
- * 'clientfd' est un socket connecte a un client.
- * 'pathname' est le nom du fichier ou repertoire a lister.
- */
-void dir_file (int clientfd, char *pathname)
+// Requête DIR
+void dir_file (int socket, char *pathname)
 {
-    struct answer reponse;
-    struct stat stat_fich;
+    struct answer response;
+    response.errnum = 0;
+    response.nbbytes = 0;
 
-    reponse.errnum = 0;
-    reponse.nbbytes = 0;
+    struct stat file_stat;
+
+
     FILE* file_exist = fopen(pathname,"r");
-
-    if (file_exist!=NULL)
-    {
-        reponse.ack = ANSWER_OK;
-    }
-    else
-    {
-        printf ("Le dossier n'existe pas\n");
-        reponse.ack = ANSWER_ERROR;
-        reponse.errnum = errno;
+    if (file_exist != NULL) {
+        response.ack = ANSWER_OK;
+    } else {
+        response.ack = ANSWER_ERROR;
+        response.errnum = errno;
     }
 
-    if(stat(pathname, &stat_fich) == -1)
-    {
-        reponse.errnum = errno;
-        fprintf (stderr, "Erreur, impossible de récupéré les informations\n");
+    if(stat(pathname, &file_stat) == -1) {
         exit (errno);
-    }
-    else
-    {
-        reponse.nbbytes = stat_fich.st_size;
+    } else {
+        response.nbbytes = (int) file_stat.st_size;
     }
 
     fclose (file_exist);
 
-    if(write (clientfd, &reponse, sizeof(reponse)) == -1)
-    {
-        fprintf (stderr, "Erreur lors de l'écriture du fichier\n");
+    if(write (socket, &response, sizeof(response)) == -1) {
         exit (errno);
     }
 
-    if(reponse.ack != ANSWER_ERROR)
-    {
-        /*  Sortie standard*/
-        dup2(clientfd, STDOUT_FILENO);
-        /*  Sortie d' erreur*/
-        dup2(clientfd, STDERR_FILENO);
+    if(response.ack != ANSWER_ERROR) {
+        // Duplicate standard error file descriptor
+        dup2(socket, STDERR_FILENO);
+
+        // Duplicate standard output file descriptor
+        dup2(socket, STDOUT_FILENO);
+
         execlp("ls", "ls", "-l", pathname, 0);
     }
-    printf ("Fin");
-
 } /* dir_file */
 
 
 
-/*
- * Lit une requete sur le descripteur 'f', et appelle la procedure
- * correspondante pour gerer cette requete.
- */
+// Gestion des request
 void handle_request (int f)
 {
     struct request r;
 
-    printf ("Process %d, handling connection from %s\n",
-            getpid(), get_callername (f));
+    read(f, &r, sizeof(r));
 
-    /* Lecture de la requete */
-    read (f, &r, sizeof(r));
-
-    /* Identification de la requete*/
-    switch(r.kind)
-    {
-        case REQUEST_PUT :
-            put_file (f, r.path, r.nbbytes);
-            break;
-        case REQUEST_GET :
-            get_file (f, r.path);
-            break;
-        case REQUEST_DEL :
-            del_file (f, r.path);
-            break;
-        case REQUEST_DIR :
-            dir_file(f, r.path);
-            break;
-        default :
-            printf ("Erreur, la requete n'a pas été identifiée\n");
-            break;
+    if (r.kind == REQUEST_PUT) {
+        put_file(f, r.path, r.nbbytes);
+    } else if (r.kind == REQUEST_DEL) {
+        del_file(f, r.path);
+    } else if (r.kind == REQUEST_DIR) {
+        dir_file(f, r.path);
+    } else {
+        get_file(f, r.path);
     }
 }
 
 
-int main ()
-{
+int main () {
     struct sockaddr_in soc_in;
     struct sockaddr_in info_client;
     int val;
@@ -325,8 +244,7 @@ int main ()
     addrlen = sizeof(struct sockaddr_in);
 
     /* Attend une demande de connexion */
-    while (1)
-    {
+    for(;;) {
         printf ("Attente... \n");
         new = accept(ss,(struct sockaddr*)&info_client, &addrlen);
 
@@ -348,5 +266,4 @@ int main ()
             printf (" Processus fils termine\n");
         }
     }
-    return 0;
 }
