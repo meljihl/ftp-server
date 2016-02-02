@@ -33,13 +33,11 @@
  * check_answer ne rend la main que si  a->ack est ANSWER_OK,
  * sinon le processus se termine avec un message d'erreur.
  */
-void check_answer (struct answer *a)
-{
+void check_answer (struct answer *a) {
     switch (a->ack) {
         case ANSWER_OK:
             break;
         case ANSWER_UNKNOWN:
-            fprintf (stderr, "?? unknown request ?\n");
             exit (1);
         case ANSWER_ERROR:
             if (a->errnum != 0) {
@@ -50,52 +48,41 @@ void check_answer (struct answer *a)
             }
             exit (1);
         default:
-            fprintf (stderr, "Bad answer from server %d\n", a->ack);
             exit (1);
     }
 }
 
-/*
- * Obtention d'un fichier distant.
- * 'serverfd' est un socket connecte a la machine 'servername'.
- * 'distname' est le nom du fichier a demander, 'localname' est le nom du
- * fichier resultat.
- */
+//Obtention d'un fichier distant
 void get_file (int serverfd, char *servername, char *distname, char *localname)
 {
-    struct request requete;
-    struct answer reponse;
+    struct request request;
+    struct answer response;
     struct stat buf;
 
-    /*  Construction de la requete */
-    requete.kind = REQUEST_GET;
-    strcpy(requete.path, distname);
+    //Construction de la request
+    request.kind = REQUEST_GET;
+    strcpy(request.path, distname);
 
-    /*  Envoie la requete au serveur */
-    if (write(serverfd, &requete,sizeof(struct request)) == -1)
-    {
-        fprintf(stdout,"[%i] : Erreur lors de l'envoi de la requete au serveur\n",getpid());
+    //Envoie la request au serveur
+    if (write(serverfd, &request,sizeof(struct request)) == -1) {
         exit(EXIT_FAILURE);
     }
 
-    /*  Lit la r�ponse du serveur */
-    if (read(serverfd, &reponse, sizeof(struct answer)) == -1)
-    {
-        fprintf(stdout, "[%i] : Erreur lors de la lecture de la reponse\n", getpid());
+    //Lit la réponse du serveur
+    if (read(serverfd, &response, sizeof(struct answer)) == -1) {
         exit(EXIT_FAILURE);
     }
 
-    /*  V�rification de la r�ponse */
-    check_answer(&reponse);
+    //Vérification de la réponse
+    check_answer(&response);
 
     int fd = open(localname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if( fd == -1)
-    {
+    if( fd == -1) {
         perror("Probleme de copie");
         exit(1);
     }
 
-    /*  Echange de donn�es */
+    //Echange de données
     copy_all_bytes(serverfd, fd);
     close(fd);
     close(serverfd);
@@ -104,55 +91,43 @@ void get_file (int serverfd, char *servername, char *distname, char *localname)
 }
 
 
-/*
- * Envoi d'un fichier a distance.
- * 'serverfd' est un socket connecte a la machine 'servername'.
- * 'localname' est le nom du fichier a envoyer, 'distname' est le nom du
- * fichier resultat (sur la machine distante).
- */
-void put_file (int serverfd, char *servername, char *localname, char *distname)
-{
-    struct request requete;
-    struct answer reponse;
+//Envoi d'un fichier a distance.
+void put_file (int serverfd, char *servername, char *localname, char *distname) {
+    struct request request;
+    struct answer response;
     struct stat buf;
 
-    /*  Construction de la requete */
-    requete.kind = REQUEST_PUT;
-    strcpy(requete.path, distname);
+    //Construction de la request
+    request.kind = REQUEST_PUT;
+    strcpy(request.path, distname);
 
-    if(stat(localname,&buf) == -1)
-    {
+    if(stat(localname,&buf) == -1) {
         perror(localname);
         exit(1);
     }
 
-    requete.nbbytes = buf.st_size;
+    request.nbbytes = buf.st_size;
 
-    /*  Envoie la requete au serveur */
-    if (write(serverfd, &requete,sizeof(requete)) == -1)
-    {
-        fprintf(stdout,"[%i] : Erreur lors de l'envoi de la requete au serveur\n",getpid());
+    //Envoie la request au serveur
+    if (write(serverfd, &request,sizeof(request)) == -1) {
         exit(EXIT_FAILURE);
     }
 
-    /*  Lit la r�ponse du serveur */
-    if (read(serverfd, &reponse, sizeof(reponse) == -1) == -1 )
-    {
-        fprintf(stdout, "[%i] : Erreur lors de la lecture de la reponse\n", getpid());
+    //Lit la réponse du serveur
+    if (read(serverfd, &response, sizeof(response) == -1) == -1 ) {
         exit(EXIT_FAILURE);
     }
 
-    /*  V�rification de la r�ponse */
-    check_answer(&reponse);
+    //Vérification de la réponse
+    check_answer(&response);
 
     int fd = open(localname, O_RDONLY);
-    if( fd == -1)
-    {
+    if( fd == -1) {
         perror("Probleme de copy");
         exit(1);
     }
 
-    /*  Echange de donn�es */
+    //Echange de données
     copy_all_bytes(fd, serverfd);
     close(fd);
     printf("Fichier %s envoye \n", localname);
@@ -160,97 +135,72 @@ void put_file (int serverfd, char *servername, char *localname, char *distname)
 }
 
 
-/*
- * Destruction d'un fichier distant.
- * 'serverfd' est un socket connecte a la machine 'servername'.
- * 'distname' est le nom du fichier a detruire.
- */
-void del_file (int serverfd, char *servername, char *distname)
-{
+//Destruction d'un fichier distant.
+void del_file (int serverfd, char *servername, char *distname) {
     struct request Client_DEL;
-    struct answer Reponse_DEL;
+    struct answer response_DEL;
     int del, test;
 
     Client_DEL.kind = REQUEST_DEL;
     strcpy(Client_DEL.path,distname);
-    /*Envoie la requete sur le serveur*/
+    /*Envoie la request sur le serveur*/
     test = write(serverfd, &Client_DEL, sizeof(Client_DEL));
-    if (test == -1)
-    {
-        perror("Erreur requete");
+    if (test == -1) {
+        perror("Erreur request");
         exit(EXIT_FAILURE);
     }
-    /*Lit la r�ponse du serveur*/
-    test = read(serverfd, &Reponse_DEL, sizeof(Reponse_DEL));
-    if (test == -1)
-    {
-        perror("Erreur r�ponse");
+    //Lit la réponse du serveur
+    test = read(serverfd, &response_DEL, sizeof(response_DEL));
+    if (test == -1) {
+        perror("Erreur réponse");
         exit(EXIT_FAILURE);
     }
 
-    check_answer(&Reponse_DEL);
+    check_answer(&response_DEL);
 
     printf("Suppression fichier OK \n");
-    /**** A COMPLETER ****/
 
 }
 
-/*
- * Obtention d'un dir distant.
- * 'serverfd' est un socket connecte a la machine 'servername'.
- * 'distname' est le nom du fichier ou repertoire distant a lister.
- */
-void dir_file (int serverfd, char *servername, char *distname)
-{
-    struct request requete;
-    struct answer reponse;
+//Obtention d'un dir distant.
+void dir_file (int serverfd, char *servername, char *distname) {
+    struct request request;
+    struct answer response;
 
-    /*  Construction de la requete */
-    requete.kind = REQUEST_DIR;
-    strcpy(requete.path, distname);
+    //Construction de la request
+    request.kind = REQUEST_DIR;
+    strcpy(request.path, distname);
 
-    /*  Envoie la requete au serveur */
-    if (write(serverfd, &requete, sizeof(requete)) == -1)
-    {
-        fprintf(stdout,"[%i] : Erreur lors de l'envoi de la requete au serveur\n",getpid());
+    //Envoie la request au serveur
+    if (write(serverfd, &request, sizeof(request)) == -1) {
         exit(EXIT_FAILURE);
     }
 
-    /*  Lit la r�ponse du serveur */
-    if (read(serverfd,&reponse, sizeof(reponse)) == -1)
-    {
-        fprintf(stdout, "[%i] : Erreur lors de la lecture de la reponse\n", getpid());
+    //Lit la réponse du serveur
+    if (read(serverfd,&response, sizeof(response)) == -1) {
         exit(EXIT_FAILURE);
     }
 
-    /*  V�rification de la r�ponse */
-    check_answer(&reponse);
+    //Vérification de la réponse
+    check_answer(&response);
 
-    /*  Echange de donn�es */
+    //Echange de données
     copy_all_bytes(serverfd, STDOUT_FILENO);
     close(serverfd);
     exit(EXIT_SUCCESS);
-    /**** A COMPLETER ****/
-
 }
 
 
-/*
- * Retourne un socket connecte la machine 'serverhost' sur le port 'port',
- * ou termine le processus en cas d'echec.
- */
-int connection (char *serverhost, unsigned int port)
-{
-    /* Descripteur de la socket */
+//Retourne un socket ou termine le processus en cas d'echec.
+int connection (char *serverhost, unsigned int port) {
+    //Description de la socket
     int retour;
     struct sockaddr_in adresse;
 
     struct hostent *sp;
 
     sp = gethostbyname(serverhost);
-    if (sp == NULL)
-    {
-        fprintf(stdout, "Machine %s inconnue !\n", serverhost);
+    if (sp == NULL) {
         exit(EXIT_FAILURE);
     }
 
@@ -260,37 +210,28 @@ int connection (char *serverhost, unsigned int port)
     adresse.sin_port = htons(port);
     memcpy(&adresse.sin_addr.s_addr, sp->h_addr_list[0],sp->h_length);
 
-    if (sock != -1)
-    {
+    if (sock != -1) {
         fprintf(stdout, "[%i] [desc %i]: Le socket client est rattache au port %i \n", getpid(), sock, ntohs(adresse.sin_port));
-    }
-    else
-    {
-        fprintf(stdout, "[%i] [desc %i]: Le socket client n'a pas reussi a se rattacher au port %i \n", getpid(), sock, ntohs(adresse.sin_port));
+    } else {
         exit(EXIT_FAILURE);
     }
 
-    /* Connection de la socket client au serveur */
+    //Connection de la socket client au serveur
     retour = connect(sock,(struct sockaddr *)&adresse, sizeof(adresse));
 
-    if (retour == -1)
-    {
-        fprintf(stdout, "[%i] connection impossible !\n", getpid());
+    if (retour == -1) {
         exit(EXIT_FAILURE);
-    }
-    else {
+    } else {
         printf("connection etablie\n");
     }
 
-    /* Retourne le_socket_connecte_au_serveur  */
+    //Retourne le_socket_connecte_au_serveur
     return(sock);
 
 
 }
 
-/**** A COMPLETER ****/
-void usage (void)
-{
+void usage (void) {
     fprintf (stderr, "miniftp: hostname get distfilename localfilename\n");
     fprintf (stderr, "miniftp: hostname put localfilename distfilename\n");
     fprintf (stderr, "miniftp: hostname del distfilename\n");
@@ -298,28 +239,26 @@ void usage (void)
     exit (2);
 }
 
-int main (int argc, char **argv)
-{
+int main (int argc, char **argv) {
     char *serverhost;
     int cmde;
     int serverfd;
 
-    if (argc < 3)
-        usage ();
-
+    if (argc < 3) {
+        usage();
+    }
     serverhost = argv[1];
 
-    if ((strcmp (argv[2], "put") == 0) && (argc == 5))
+    if ((strcmp(argv[2], "put") == 0) && (argc == 5)){
         cmde = REQUEST_PUT;
-    else if ((strcmp (argv[2], "get") == 0) && (argc == 5))
+    } else if ((strcmp(argv[2], "get") == 0) && (argc == 5)){
         cmde = REQUEST_GET;
-    else if ((strcmp (argv[2], "del") == 0) && (argc == 4))
+    } else if ((strcmp(argv[2], "del") == 0) && (argc == 4)){
         cmde = REQUEST_DEL;
-    else if ((strcmp (argv[2], "dir") == 0) && (argc == 4))
+    } else if ((strcmp(argv[2], "dir") == 0) && (argc == 4)){
         cmde = REQUEST_DIR;
-    else
-        usage();
-
+    } else { usage();
+    }
     serverfd = connection (serverhost, PORT);
 
     switch (cmde) {
