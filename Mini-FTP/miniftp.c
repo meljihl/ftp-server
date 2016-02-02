@@ -36,22 +36,22 @@
 void check_answer (struct answer *a)
 {
     switch (a->ack) {
-      case ANSWER_OK:
-        break;
-      case ANSWER_UNKNOWN:
-        fprintf (stderr, "?? unknown request ?\n");
-        exit (1);
-      case ANSWER_ERROR:
-        if (a->errnum != 0) {
-            errno = a->errnum;
-            perror ("Server rejection");
-        } else {
-            fprintf (stderr, "Server rejection\n");
-        }
-        exit (1);
-      default:
-        fprintf (stderr, "Bad answer from server %d\n", a->ack);
-        exit (1);
+        case ANSWER_OK:
+            break;
+        case ANSWER_UNKNOWN:
+            fprintf (stderr, "?? unknown request ?\n");
+            exit (1);
+        case ANSWER_ERROR:
+            if (a->errnum != 0) {
+                errno = a->errnum;
+                perror ("Server rejection");
+            } else {
+                fprintf (stderr, "Server rejection\n");
+            }
+            exit (1);
+        default:
+            fprintf (stderr, "Bad answer from server %d\n", a->ack);
+            exit (1);
     }
 }
 
@@ -63,8 +63,43 @@ void check_answer (struct answer *a)
  */
 void get_file (int serverfd, char *servername, char *distname, char *localname)
 {
+    struct request requete;
+    struct answer reponse;
+    struct stat buf;
 
-    /**** A COMPLETER ****/
+    /*  Construction de la requete */
+    requete.kind = REQUEST_GET;
+    strcpy(requete.path, distname);
+
+    /*  Envoie la requete au serveur */
+    if (write(serverfd, &requete,sizeof(struct request)) == -1)
+    {
+        fprintf(stdout,"[%i] : Erreur lors de l'envoi de la requete au serveur\n",getpid());
+        exit(EXIT_FAILURE);
+    }
+
+    /*  Lit la r�ponse du serveur */
+    if (read(serverfd, &reponse, sizeof(struct answer)) == -1)
+    {
+        fprintf(stdout, "[%i] : Erreur lors de la lecture de la reponse\n", getpid());
+        exit(EXIT_FAILURE);
+    }
+
+    /*  V�rification de la r�ponse */
+    check_answer(&reponse);
+
+    int fd = open(localname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if( fd == -1)
+    {
+        perror("Probleme de copie");
+        exit(1);
+    }
+
+    /*  Echange de donn�es */
+    copy_all_bytes(serverfd, fd);
+    close(fd);
+    close(serverfd);
+    printf("Fichier %s recu \n", localname);
 
 }
 
@@ -77,8 +112,50 @@ void get_file (int serverfd, char *servername, char *distname, char *localname)
  */
 void put_file (int serverfd, char *servername, char *localname, char *distname)
 {
+    struct request requete;
+    struct answer reponse;
+    struct stat buf;
 
-    /**** A COMPLETER ****/
+    /*  Construction de la requete */
+    requete.kind = REQUEST_PUT;
+    strcpy(requete.path, distname);
+
+    if(stat(localname,&buf) == -1)
+    {
+        perror(localname);
+        exit(1);
+    }
+
+    requete.nbbytes = buf.st_size;
+
+    /*  Envoie la requete au serveur */
+    if (write(serverfd, &requete,sizeof(requete)) == -1)
+    {
+        fprintf(stdout,"[%i] : Erreur lors de l'envoi de la requete au serveur\n",getpid());
+        exit(EXIT_FAILURE);
+    }
+
+    /*  Lit la r�ponse du serveur */
+    if (read(serverfd, &reponse, sizeof(reponse) == -1) == -1 )
+    {
+        fprintf(stdout, "[%i] : Erreur lors de la lecture de la reponse\n", getpid());
+        exit(EXIT_FAILURE);
+    }
+
+    /*  V�rification de la r�ponse */
+    check_answer(&reponse);
+
+    int fd = open(localname, O_RDONLY);
+    if( fd == -1)
+    {
+        perror("Probleme de copy");
+        exit(1);
+    }
+
+    /*  Echange de donn�es */
+    copy_all_bytes(fd, serverfd);
+    close(fd);
+    printf("Fichier %s envoye \n", localname);
 
 }
 
@@ -90,7 +167,30 @@ void put_file (int serverfd, char *servername, char *localname, char *distname)
  */
 void del_file (int serverfd, char *servername, char *distname)
 {
+    struct request Client_DEL;
+    struct answer Reponse_DEL;
+    int del, test;
 
+    Client_DEL.kind = REQUEST_DEL;
+    strcpy(Client_DEL.path,distname);
+    /*Envoie la requete sur le serveur*/
+    test = write(serverfd, &Client_DEL, sizeof(Client_DEL));
+    if (test == -1)
+    {
+        perror("Erreur requete");
+        exit(EXIT_FAILURE);
+    }
+    /*Lit la r�ponse du serveur*/
+    test = read(serverfd, &Reponse_DEL, sizeof(Reponse_DEL));
+    if (test == -1)
+    {
+        perror("Erreur r�ponse");
+        exit(EXIT_FAILURE);
+    }
+
+    check_answer(&Reponse_DEL);
+
+    printf("Suppression fichier OK \n");
     /**** A COMPLETER ****/
 
 }
@@ -102,7 +202,34 @@ void del_file (int serverfd, char *servername, char *distname)
  */
 void dir_file (int serverfd, char *servername, char *distname)
 {
+    struct request requete;
+    struct answer reponse;
 
+    /*  Construction de la requete */
+    requete.kind = REQUEST_DIR;
+    strcpy(requete.path, distname);
+
+    /*  Envoie la requete au serveur */
+    if (write(serverfd, &requete, sizeof(requete)) == -1)
+    {
+        fprintf(stdout,"[%i] : Erreur lors de l'envoi de la requete au serveur\n",getpid());
+        exit(EXIT_FAILURE);
+    }
+
+    /*  Lit la r�ponse du serveur */
+    if (read(serverfd,&reponse, sizeof(reponse)) == -1)
+    {
+        fprintf(stdout, "[%i] : Erreur lors de la lecture de la reponse\n", getpid());
+        exit(EXIT_FAILURE);
+    }
+
+    /*  V�rification de la r�ponse */
+    check_answer(&reponse);
+
+    /*  Echange de donn�es */
+    copy_all_bytes(serverfd, STDOUT_FILENO);
+    close(serverfd);
+    exit(EXIT_SUCCESS);
     /**** A COMPLETER ****/
 
 }
@@ -114,15 +241,54 @@ void dir_file (int serverfd, char *servername, char *distname)
  */
 int connection (char *serverhost, unsigned int port)
 {
+    /* Descripteur de la socket */
+    int retour;
+    struct sockaddr_in adresse;
 
-    /**** A COMPLETER ****/
+    struct hostent *sp;
 
-    /*
-    return le_socket_connecte_au_serveur;
-    */
+    sp = gethostbyname(serverhost);
+    if (sp == NULL)
+    {
+        fprintf(stdout, "Machine %s inconnue !\n", serverhost);
+        exit(EXIT_FAILURE);
+    }
+
+    int sock = socket(PF_INET,SOCK_STREAM,0);
+
+    adresse.sin_family = AF_INET;
+    adresse.sin_port = htons(port);
+    memcpy(&adresse.sin_addr.s_addr, sp->h_addr_list[0],sp->h_length);
+
+    if (sock != -1)
+    {
+        fprintf(stdout, "[%i] [desc %i]: Le socket client est rattache au port %i \n", getpid(), sock, ntohs(adresse.sin_port));
+    }
+    else
+    {
+        fprintf(stdout, "[%i] [desc %i]: Le socket client n'a pas reussi a se rattacher au port %i \n", getpid(), sock, ntohs(adresse.sin_port));
+        exit(EXIT_FAILURE);
+    }
+
+    /* Connection de la socket client au serveur */
+    retour = connect(sock,(struct sockaddr *)&adresse, sizeof(adresse));
+
+    if (retour == -1)
+    {
+        fprintf(stdout, "[%i] connection impossible !\n", getpid());
+        exit(EXIT_FAILURE);
+    }
+    else {
+        printf("connection etablie\n");
+    }
+
+    /* Retourne le_socket_connecte_au_serveur  */
+    return(sock);
+
+
 }
 
-
+/**** A COMPLETER ****/
 void usage (void)
 {
     fprintf (stderr, "miniftp: hostname get distfilename localfilename\n");
@@ -139,36 +305,36 @@ int main (int argc, char **argv)
     int serverfd;
 
     if (argc < 3)
-      usage ();
+        usage ();
 
     serverhost = argv[1];
 
     if ((strcmp (argv[2], "put") == 0) && (argc == 5))
-      cmde = REQUEST_PUT;
+        cmde = REQUEST_PUT;
     else if ((strcmp (argv[2], "get") == 0) && (argc == 5))
-      cmde = REQUEST_GET;
+        cmde = REQUEST_GET;
     else if ((strcmp (argv[2], "del") == 0) && (argc == 4))
-      cmde = REQUEST_DEL;
+        cmde = REQUEST_DEL;
     else if ((strcmp (argv[2], "dir") == 0) && (argc == 4))
-      cmde = REQUEST_DIR;
+        cmde = REQUEST_DIR;
     else
-      usage();
+        usage();
 
     serverfd = connection (serverhost, PORT);
 
     switch (cmde) {
-      case REQUEST_GET:
-        get_file (serverfd, serverhost, argv[3], argv[4]);
-        break;
-      case REQUEST_PUT:
-        put_file (serverfd, serverhost, argv[3], argv[4]);
-        break;
-      case REQUEST_DEL:
-        del_file (serverfd, serverhost, argv[3]);
-        break;
-      case REQUEST_DIR:
-        dir_file (serverfd, serverhost, argv[3]);
-        break;
+        case REQUEST_GET:
+            get_file (serverfd, serverhost, argv[3], argv[4]);
+            break;
+        case REQUEST_PUT:
+            put_file (serverfd, serverhost, argv[3], argv[4]);
+            break;
+        case REQUEST_DEL:
+            del_file (serverfd, serverhost, argv[3]);
+            break;
+        case REQUEST_DIR:
+            dir_file (serverfd, serverhost, argv[3]);
+            break;
     }
 
     close (serverfd);

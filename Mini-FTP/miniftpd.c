@@ -64,8 +64,38 @@ char *get_callername (int fd)
  */
 void put_file (int clientfd, char *filename, int length)
 {
+    struct answer reponse;
+    struct stat stat_fich;
 
-    /**** A COMPLETER ****/
+    /*  Construction de la reponse */
+    reponse.errnum = 0;
+    reponse.nbbytes = 0;
+    reponse.ack = ANSWER_OK;
+
+    /* Creation du fichier */
+    printf("Creation du fichier \n");
+    int fichier = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    if(fichier != -1)
+    {
+        printf("Copies \n");
+        /* Echange des données  */
+        copy_n_bytes (clientfd, fichier, length);
+        printf("Fermeture \n");
+        /* Fermeture du fichier */
+        close (fichier);
+    }
+    else
+    {
+        printf ("Erreur lors de la creation du fichier \n");
+    }
+
+    /*  Envoi de la réponse */
+    if(write (clientfd, &reponse, sizeof(reponse)) == -1)
+    {
+        fprintf (stderr, "Erreur lors de l'écriture du fichier\n");
+        exit (errno);
+    }
 
 } /* put_file */
 
@@ -77,8 +107,37 @@ void put_file (int clientfd, char *filename, int length)
  */
 void get_file (int clientfd, char *filename)
 {
+    struct answer reponse;
+    struct stat buf;
 
-    /**** A COMPLETER ****/
+    /*  Construction de la reponse */
+    reponse.errnum = 0;
+    reponse.nbbytes = 0;
+    reponse.ack = ANSWER_OK;
+
+    /* Récupération du fichier */
+    printf("Récupération du fichier \n");
+    int fichier = open(filename, O_RDONLY);
+    /*Verifie si le fichier existe*/
+    if (fichier != -1){
+        reponse.ack = ANSWER_OK;
+    }else{
+        printf ("Le fichier n'existe pas\n");
+        reponse.ack = ANSWER_ERROR;
+        reponse.errnum = errno;
+    }
+    stat(filename, &buf);
+    reponse.nbbytes = (int) buf.st_size;
+
+    /*  Envoi de l'accusé de réponse */
+    if(write (clientfd, &reponse, sizeof(struct answer)) == -1)
+    {
+        fprintf (stderr, "Erreur lors de l'écriture de la reponse\n");
+        exit (errno);
+    }
+    /*  Envoi de le fichier */
+    copy_all_bytes (fichier, clientfd);
+    close (fichier);
 
 } /* get_file */
 
@@ -90,6 +149,40 @@ void get_file (int clientfd, char *filename)
  */
 void del_file (int clientfd, char *filename)
 {
+    /*Création réponse*/
+    struct answer rep_del;
+    rep_del.ack = ANSWER_OK;
+
+    /*  Construction de la reponse */
+    rep_del.errnum = 0;
+
+    /* Verification de l'existence fichier a supprimer */
+    FILE* file_exist = fopen(filename,"r");
+    if (file_exist != NULL)
+    {
+        rep_del.ack = ANSWER_OK;
+    }
+    else
+    {
+        printf ("Le fichier n'existe pas\n");
+        printf("%s",filename);
+        rep_del.ack = ANSWER_ERROR;
+        rep_del.errnum = errno;
+    }
+    fclose (file_exist);
+
+    /*  Envoi de la réponse */
+    printf("Envoi de la réponse\n");
+    if(write (clientfd, &rep_del, sizeof(rep_del)) == -1)
+    {
+        fprintf (stderr, "Erreur lors de l'écriture de la reponse\n");
+        exit (errno);
+    }
+
+    /*Suppression du fichier*/
+    unlink(filename);
+
+    puts("suppression reussi");
 
     /**** A COMPLETER ****/
 
@@ -102,8 +195,52 @@ void del_file (int clientfd, char *filename)
  */
 void dir_file (int clientfd, char *pathname)
 {
+    struct answer reponse;
+    struct stat stat_fich;
 
-    /**** A COMPLETER ****/
+    reponse.errnum = 0;
+    reponse.nbbytes = 0;
+    FILE* file_exist = fopen(pathname,"r");
+
+    if (file_exist!=NULL)
+    {
+        reponse.ack = ANSWER_OK;
+    }
+    else
+    {
+        printf ("Le dossier n'existe pas\n");
+        reponse.ack = ANSWER_ERROR;
+        reponse.errnum = errno;
+    }
+
+    if(stat(pathname, &stat_fich) == -1)
+    {
+        reponse.errnum = errno;
+        fprintf (stderr, "Erreur, impossible de récupéré les informations\n");
+        exit (errno);
+    }
+    else
+    {
+        reponse.nbbytes = stat_fich.st_size;
+    }
+
+    fclose (file_exist);
+
+    if(write (clientfd, &reponse, sizeof(reponse)) == -1)
+    {
+        fprintf (stderr, "Erreur lors de l'écriture du fichier\n");
+        exit (errno);
+    }
+
+    if(reponse.ack != ANSWER_ERROR)
+    {
+        /*  Sortie standard*/
+        dup2(clientfd, STDOUT_FILENO);
+        /*  Sortie d' erreur*/
+        dup2(clientfd, STDERR_FILENO);
+        execlp("ls", "ls", "-l", pathname, 0);
+    }
+    printf ("Fin");
 
 } /* dir_file */
 
@@ -120,23 +257,47 @@ void handle_request (int f)
     printf ("Process %d, handling connection from %s\n",
             getpid(), get_callername (f));
 
+    /* Lecture de la requete */
+    read (f, &r, sizeof(r));
 
-    /**** A COMPLETER ****/
-
+    /* Identification de la requete*/
+    switch(r.kind)
+    {
+        case REQUEST_PUT :
+            put_file (f, r.path, r.nbbytes);
+            break;
+        case REQUEST_GET :
+            get_file (f, r.path);
+            break;
+        case REQUEST_DEL :
+            del_file (f, r.path);
+            break;
+        case REQUEST_DIR :
+            dir_file(f, r.path);
+            break;
+        default :
+            printf ("Erreur, la requete n'a pas été identifiée\n");
+            break;
+    }
 }
 
 
 int main ()
 {
     struct sockaddr_in soc_in;
+    struct sockaddr_in info_client;
     int val;
     int ss;                     /* socket d'ecoute */
-
+    int new, addrlen;
+    struct hostent *host;
     /* creation d'un socket 'ss' : famille IP et type TCP */
+    ss = socket (AF_INET, SOCK_STREAM, 0);
 
-
-    /**** A COMPLETER ****/
- 
+    if (ss <= 0)
+    {
+        fprintf (stderr, "Probleme lors de la creation du socket\n");
+        exit(errno);
+    }
 
     /* Force la reutilisation de l'adresse si non allouee */
     val = 1;
@@ -146,25 +307,46 @@ int main ()
     }
 
     /*
-     * Nomme localement le socket :
-     * socket inet, port local PORT, adresse IP locale quelconque
-     */
+    * Nomme localement le socket :
+    * socket inet, port local PORT, adresse IP locale quelconque
+    */
+    soc_in.sin_family = 		AF_INET;
+    soc_in.sin_addr.s_addr = INADDR_ANY;
+    soc_in.sin_port = htons(PORT);
 
-
-    /**** A COMPLETER ****/
-
+    if(bind (ss, (struct sockaddr*)&soc_in, sizeof(struct sockaddr_in)) != 0)
+    {
+        fprintf (stderr, "Probleme de bind\n");
+        exit (errno);
+    }
 
     /* Prepare le socket a la reception de connexions */
+    listen(ss, 10);
+    addrlen = sizeof(struct sockaddr_in);
 
+    /* Attend une demande de connexion */
+    while (1)
+    {
+        printf ("Attente... \n");
+        new = accept(ss,(struct sockaddr*)&info_client, &addrlen);
 
-    /**** A COMPLETER ****/
-
-
-    while (1) {
-
-        /**** A COMPLETER ****/
-
-    } /* while (1) */
-    /* NOTREACHED */
+        if(!fork())
+        {
+            /* Processus Fils */
+            /* Fermeture du processus pére */
+            close(ss);
+            handle_request(new);
+            close(new);
+            exit(0);
+        }
+        else
+        {
+            /* Processus Pére */
+            /* Fermeture du processus fils*/
+            close(new);
+            wait (NULL);
+            printf (" Processus fils termine\n");
+        }
+    }
     return 0;
 }

@@ -6,9 +6,9 @@
 
 CC = gcc
 #CFLAGS = -g -v
-CFLAGS = -g
+CFLAGS = -g -v
 LDFLAGS = -g
-LDLIBS =  -lsocket -lnsl
+LDLIBS = 
 
 EXE = miniftp miniftpd
 
