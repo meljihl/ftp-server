@@ -198,7 +198,7 @@ int main () {
     int val;
     int ss;                     /* socket d'ecoute */
 
-    /* creation d'un socket 'ss' : famille IP et type TCP */
+    /* création d'un socket 'ss' : famille IP et type TCP */
     ss = socket(AF_INET, SOCK_STREAM, 0);
 
     /**** A COMPLETER ****/
@@ -225,7 +225,7 @@ int main () {
     }
 
 
-    /* Prepare le socket a la reception de connexions */
+    /* Prépare le socket a la reception de connexions */
 
     if (listen(ss, 5) < 0) { // Fd en mode écoute, maximum 5 connexions
         exit(errno);
@@ -255,12 +255,8 @@ int main () {
             perror("Failed to get host addr");
             exit(errno);
         }
-
-
-        /**** A COMPLETER ****/
-
-    } /* while (1) */
-    /* NOTREACHED */
+    }
+    // Non atteint
     return 0;
 
 }
