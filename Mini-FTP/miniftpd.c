@@ -18,6 +18,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/wait.h>
+#include <string.h>
 
 #include "requests.h"
 #include "common.h"
@@ -55,39 +56,28 @@ char *get_callername (int fd)
 } /* get_callername */
 
 
-/**
- * Méthode utilisée pour la requête PUT (copie d'un fichier)
- */
 void put_file (int socket, char *filename, int length)
 {
-    // Réponse
     struct answer response;
     response.errnum = 0;
     response.nbbytes = 0;
     response.ack = ANSWER_OK;
 
-    // Création du fichier
-    printf("Creation du fichier \n");
     int file = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if(file != -1) {
-        printf("Copies \n");
-        copy_n_bytes (socket, file, length);
-        printf("Fermeture \n");
-        close (file);
-    } else {
-        printf ("Erreur lors de la creation du fichier \n");
+
+    if (file == -1) {
+        exit(errno);
     }
 
-    // Réponse
+    copy_n_bytes (socket, file, length);
+
     if(write (socket, &response, sizeof(response)) == -1) {
-        fprintf (stderr, "Erreur lors de l'écriture du fichier\n");
         exit (errno);
     }
 
 } /* put_file */
 
 
-// Méthode utilisée pour la requête GET (Récupération d'un fichier)
 void get_file (int socket, char *filename)
 {
     struct answer response;
@@ -117,7 +107,6 @@ void get_file (int socket, char *filename)
 } /* get_file */
 
 
-// Suppression d'un fichier
 void del_file (int socket, char *filename)
 {
     struct answer response;
@@ -125,22 +114,22 @@ void del_file (int socket, char *filename)
     response.errnum = 0;
 
     FILE* file_exist = fopen(filename,"r");
+
     if (file_exist != NULL) {
         response.ack = ANSWER_OK;
     } else {
         response.ack = ANSWER_ERROR;
         response.errnum = errno;
     }
+
     fclose (file_exist);
-    if(write (socket, &response, sizeof(response)) == -1)
-    {
+    if(write (socket, &response, sizeof(response)) == -1) {
         exit (errno);
     }
 
     remove(filename);
 } /* del_file */
 
-// Requête DIR
 void dir_file (int socket, char *pathname)
 {
     struct answer response;
@@ -183,10 +172,12 @@ void dir_file (int socket, char *pathname)
 
 
 
-// Gestion des request
 void handle_request (int f)
 {
     struct request r;
+
+    printf ("Process %d, handling connection from %s\n",
+            getpid(), get_callername (f));
 
     read(f, &r, sizeof(r));
 
@@ -204,19 +195,14 @@ void handle_request (int f)
 
 int main () {
     struct sockaddr_in soc_in;
-    struct sockaddr_in info_client;
     int val;
     int ss;                     /* socket d'ecoute */
-    int new, addrlen;
-    struct hostent *host;
-    /* creation d'un socket 'ss' : famille IP et type TCP */
-    ss = socket (AF_INET, SOCK_STREAM, 0);
 
-    if (ss <= 0)
-    {
-        fprintf (stderr, "Probleme lors de la creation du socket\n");
-        exit(errno);
-    }
+    /* creation d'un socket 'ss' : famille IP et type TCP */
+    ss = socket(AF_INET, SOCK_STREAM, 0);
+
+    /**** A COMPLETER ****/
+
 
     /* Force la reutilisation de l'adresse si non allouee */
     val = 1;
@@ -226,44 +212,55 @@ int main () {
     }
 
     /*
-    * Nomme localement le socket :
-    * socket inet, port local PORT, adresse IP locale quelconque
-    */
-    soc_in.sin_family = 		AF_INET;
+     * Nomme localement le socket :
+     * socket inet, port local PORT, adresse IP locale quelconque
+     */
+    soc_in.sin_family = AF_INET;
     soc_in.sin_addr.s_addr = INADDR_ANY;
     soc_in.sin_port = htons(PORT);
 
-    if(bind (ss, (struct sockaddr*)&soc_in, sizeof(struct sockaddr_in)) != 0)
-    {
-        fprintf (stderr, "Probleme de bind\n");
+    int bindResult = bind(ss, (const struct sockaddr*)&soc_in, sizeof(soc_in));
+    if(bindResult != 0) {
         exit (errno);
     }
 
+
     /* Prepare le socket a la reception de connexions */
-    listen(ss, 10);
-    addrlen = sizeof(struct sockaddr_in);
 
-    /* Attend une demande de connexion */
-    for(;;) {
-        printf ("Attente... \n");
-        new = accept(ss,(struct sockaddr*)&info_client, &addrlen);
-
-        if(!fork())
-        {
-            /* Processus Fils */
-            /* Fermeture du processus pére */
-            close(ss);
-            handle_request(new);
-            close(new);
-            exit(0);
-        }
-        else
-        {
-            /* Processus Pére */
-            /* Fermeture du processus fils*/
-            close(new);
-            wait (NULL);
-            printf (" Processus fils termine\n");
-        }
+    if (listen(ss, 5) < 0) { // Fd en mode écoute, maximum 5 connexions
+        exit(errno);
     }
+
+    int confd;
+    int sizeOfClient = sizeof(soc_in);
+
+    for(;;) {
+        confd = accept(ss, (struct sockaddr*) &soc_in, &sizeOfClient);
+
+        if (confd < 0) {
+            perror("Failed to accept");
+            exit(errno);
+        }
+
+        struct hostent* hostp;
+        hostp = gethostbyaddr(&soc_in.sin_addr.s_addr, sizeof(soc_in.sin_addr.s_addr), AF_INET);
+
+        if (hostp == NULL) {
+            perror("Failed to get host address");
+            exit(errno);
+        }
+
+        char* hostaddrp = inet_ntoa(soc_in.sin_addr);
+        if (hostaddrp == NULL) {
+            perror("Failed to get host addr");
+            exit(errno);
+        }
+
+
+        /**** A COMPLETER ****/
+
+    } /* while (1) */
+    /* NOTREACHED */
+    return 0;
+
 }
